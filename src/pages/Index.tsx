@@ -6,9 +6,17 @@ import { ProductionBarChart } from "@/components/dashboard/ProductionBarChart";
 import { RejectionLineChart } from "@/components/dashboard/RejectionLineChart";
 import { DefectDonutChart } from "@/components/dashboard/DefectDonutChart";
 import { DataTable } from "@/components/dashboard/DataTable";
-import { parseFile } from "@/lib/parseData";
+import { getSheetNames, parseSheet } from "@/lib/parseData";
 import { sampleData } from "@/lib/sampleData";
 import type { ProductionRow, KPIData } from "@/lib/types";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { FileSpreadsheet } from "lucide-react";
 
 function computeKPIs(rows: ProductionRow[]): KPIData {
   const totalProduction = rows.reduce((s, r) => s + r.checkedQty, 0);
@@ -28,17 +36,41 @@ function computeKPIs(rows: ProductionRow[]): KPIData {
 
 const Index = () => {
   const [data, setData] = useState<ProductionRow[]>(sampleData);
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [sheetNames, setSheetNames] = useState<string[]>([]);
+  const [selectedSheet, setSelectedSheet] = useState<string>("");
 
   const kpis = useMemo(() => computeKPIs(data), [data]);
 
   const handleFile = useCallback(async (file: File) => {
     try {
-      const rows = await parseFile(file);
-      if (rows.length > 0) setData(rows);
+      setUploadedFile(file);
+      const names = await getSheetNames(file);
+      setSheetNames(names);
+      if (names.length === 1) {
+        // শুধু একটি শীট থাকলে সরাসরি লোড করো
+        setSelectedSheet(names[0]);
+        const rows = await parseSheet(file, names[0]);
+        if (rows.length > 0) setData(rows);
+      } else {
+        setSelectedSheet("");
+        setData([]);
+      }
     } catch (err) {
       console.error("Failed to parse file:", err);
     }
   }, []);
+
+  const handleSheetSelect = useCallback(async (sheetName: string) => {
+    if (!uploadedFile) return;
+    setSelectedSheet(sheetName);
+    try {
+      const rows = await parseSheet(uploadedFile, sheetName);
+      if (rows.length > 0) setData(rows);
+    } catch (err) {
+      console.error("Failed to parse sheet:", err);
+    }
+  }, [uploadedFile]);
 
   return (
     <div className="flex min-h-screen w-full">
@@ -57,6 +89,26 @@ const Index = () => {
 
         <div className="p-6 space-y-6 max-w-7xl mx-auto">
           <FileUploadZone onFileAccepted={handleFile} />
+
+          {sheetNames.length > 1 && (
+            <div className="flex items-center gap-3 p-4 rounded-xl border border-border bg-card card-shadow">
+              <FileSpreadsheet className="h-5 w-5 text-accent shrink-0" />
+              <span className="text-sm font-medium text-foreground">শীট সিলেক্ট করুন:</span>
+              <Select value={selectedSheet} onValueChange={handleSheetSelect}>
+                <SelectTrigger className="w-[240px]">
+                  <SelectValue placeholder="একটি শীট বেছে নিন" />
+                </SelectTrigger>
+                <SelectContent>
+                  {sheetNames.map((name) => (
+                    <SelectItem key={name} value={name}>
+                      {name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           <KPICards data={kpis} />
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
