@@ -52,14 +52,35 @@ function toNum(value: unknown): number {
   return isNaN(n) ? 0 : n;
 }
 
-export function parseFile(file: File): Promise<ProductionRow[]> {
+export function getSheetNames(file: File): Promise<string[]> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: "array" });
+        resolve(workbook.SheetNames);
+      } catch (err) {
+        reject(err);
+      }
+    };
+    reader.onerror = reject;
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+export function parseSheet(file: File, sheetName: string): Promise<ProductionRow[]> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
         const workbook = XLSX.read(data, { type: "array", cellDates: true });
-        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const sheet = workbook.Sheets[sheetName];
+        if (!sheet) {
+          resolve([]);
+          return;
+        }
         const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { raw: false, defval: "" });
 
         if (json.length === 0) {
@@ -67,7 +88,6 @@ export function parseFile(file: File): Promise<ProductionRow[]> {
           return;
         }
 
-        // Log detected headers for debugging
         console.log("Detected headers:", Object.keys(json[0]));
 
         const rows: ProductionRow[] = json.map((row) => ({
