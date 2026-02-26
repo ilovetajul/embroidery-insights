@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback } from "react";
 import { DashboardSidebar } from "@/components/dashboard/DashboardSidebar";
 import { FileUploadZone } from "@/components/dashboard/FileUploadZone";
+import { GoogleSheetInput } from "@/components/dashboard/GoogleSheetInput";
 import { KPICards } from "@/components/dashboard/KPICards";
 import { ProductionBarChart } from "@/components/dashboard/ProductionBarChart";
 import { RejectionLineChart } from "@/components/dashboard/RejectionLineChart";
@@ -89,6 +90,7 @@ const Index = () => {
 
         <div className="p-6 space-y-6 max-w-7xl mx-auto">
           <FileUploadZone onFileAccepted={handleFile} />
+          <GoogleSheetInput onFileReady={handleFile} />
 
           {sheetNames.length > 1 && (
             <div className="flex items-center gap-3 p-4 rounded-xl border border-border bg-card card-shadow">
