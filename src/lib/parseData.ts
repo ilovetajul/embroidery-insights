@@ -69,17 +69,34 @@ export function getSheetNames(file: File): Promise<string[]> {
   });
 }
 
-function findHeaderRow(sheet: XLSX.WorkSheet): number {
-  const range = XLSX.utils.decode_range(sheet["!ref"] || "A1");
-  for (let r = range.s.r; r <= Math.min(range.e.r, 15); r++) {
-    for (let c = range.s.c; c <= range.e.c; c++) {
-      const cell = sheet[XLSX.utils.encode_cell({ r, c })];
-      if (cell && typeof cell.v === "string" && normalize(cell.v).includes("date")) {
-        return r;
-      }
-    }
+function findHeaderRowFromMatrix(matrix: unknown[][]): number {
+  const headerHints = [
+    "date",
+    "total check qty",
+    "checked qty",
+    "emb reject qty",
+    "reject",
+    "needle hole",
+    "uncut thread",
+    "gap stitch",
+  ];
+
+  const maxScanRows = Math.min(matrix.length, 40);
+  for (let r = 0; r < maxScanRows; r++) {
+    const row = matrix[r] ?? [];
+    const cells = row.map((v) => normalize(String(v ?? ""))).filter(Boolean);
+    if (cells.length === 0) continue;
+
+    const matchCount = headerHints.filter((hint) =>
+      cells.some((cell) => cell.includes(hint) || hint.includes(cell))
+    ).length;
+
+    // Header row must contain date + at least one quantity/defect column
+    const hasDate = cells.some((cell) => cell.includes("date"));
+    if (hasDate && matchCount >= 2) return r;
   }
-  return 0;
+
+  return -1;
 }
 
 export function parseSheet(file: File, sheetName: string): Promise<ProductionRow[]> {
@@ -90,55 +107,73 @@ export function parseSheet(file: File, sheetName: string): Promise<ProductionRow
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
         const workbook = XLSX.read(data, { type: "array", cellDates: true });
         const sheet = workbook.Sheets[sheetName];
+
         if (!sheet) {
           resolve([]);
           return;
         }
 
-        // Find the actual header row (skip company name, address, title rows)
-        const headerRowIndex = findHeaderRow(sheet);
-        const range = XLSX.utils.decode_range(sheet["!ref"] || "A1");
+        const matrix = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
+          header: 1,
+          raw: false,
+          defval: "",
+        });
 
-        // Read headers from the header row (may span 2 rows for merged headers)
-        const headers: string[] = [];
-        for (let c = range.s.c; c <= range.e.c; c++) {
-          const cell1 = sheet[XLSX.utils.encode_cell({ r: headerRowIndex, c })];
-          const cell2 = sheet[XLSX.utils.encode_cell({ r: headerRowIndex + 1, c })];
-          const h1 = cell1 ? String(cell1.v).trim() : "";
-          const h2 = cell2 ? String(cell2.v).trim() : "";
-          // Use sub-header if main header is empty or generic
-          headers.push(h2 || h1 || `col_${c}`);
+        const headerRowIndex = findHeaderRowFromMatrix(matrix);
+        if (headerRowIndex === -1) {
+          console.log("Header row not found for sheet:", sheetName);
+          resolve([]);
+          return;
         }
+
+        const headerRow = matrix[headerRowIndex] ?? [];
+        const subHeaderRow = matrix[headerRowIndex + 1] ?? [];
+
+        const headers = headerRow.map((h, i) => {
+          const top = String(h ?? "").trim();
+          const sub = String(subHeaderRow[i] ?? "").trim();
+          const topNorm = normalize(top);
+          if (!top || topNorm === "reject details" || topNorm === "defect details") {
+            return sub || `col_${i}`;
+          }
+          return top;
+        });
 
         console.log("Detected headers:", headers);
 
-        // Read data rows starting after header rows
-        const dataStartRow = headerRowIndex + 2;
         const rows: ProductionRow[] = [];
+        for (let r = headerRowIndex + 1; r < matrix.length; r++) {
+          const row = matrix[r] ?? [];
+          if (!row.some((v) => String(v ?? "").trim() !== "")) continue;
 
-        for (let r = dataStartRow; r <= range.e.r; r++) {
           const rowObj: Record<string, unknown> = {};
-          let hasData = false;
-          for (let c = range.s.c; c <= range.e.c; c++) {
-            const cell = sheet[XLSX.utils.encode_cell({ r, c })];
-            if (cell && cell.v != null && cell.v !== "") {
-              rowObj[headers[c - range.s.c]] = cell.v;
-              hasData = true;
-            }
-          }
-          if (!hasData) continue;
+          headers.forEach((h, i) => {
+            rowObj[h] = row[i] ?? "";
+          });
 
-          // Skip total/summary rows
           const dateVal = findKey(rowObj, ["date", "datum", "day", "tarikh"]);
-          if (dateVal == null || String(dateVal).toLowerCase().includes("total")) continue;
+          const dateStr = String(dateVal ?? "").trim().toLowerCase();
 
-          const checkedQty = toNum(findKey(rowObj, ["total check qty", "checked qty", "quantity checked", "qty checked", "checked", "check qty"]));
-          if (checkedQty === 0) continue; // Skip empty/invalid rows
+          if (!dateStr || dateStr.includes("total") || dateStr.includes("g-total")) continue;
+
+          const checkedQty = toNum(
+            findKey(rowObj, [
+              "total check qty",
+              "checked qty",
+              "quantity checked",
+              "qty checked",
+              "checked",
+              "check qty",
+            ])
+          );
+
+          // skip invalid/summary lines like #DIV/0 rows
+          if (checkedQty <= 0) continue;
 
           rows.push({
             date: parseExcelDate(dateVal),
             checkedQty,
-            rejects: toNum(findKey(rowObj, ["emb reject qty", "rejects", "reject", "rejection", "rej", "reject qty"])),
+            rejects: toNum(findKey(rowObj, ["emb reject qty", "reject qty", "rejects", "reject", "rejection", "rej"])),
             needleHoles: toNum(findKey(rowObj, ["needle hole", "needle holes", "nh"])),
             uncutThreads: toNum(findKey(rowObj, ["uncut thread", "uncut threads", "ut"])),
             gapStitches: toNum(findKey(rowObj, ["gap stitch", "gap stitches", "gs"])),
