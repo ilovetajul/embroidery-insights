@@ -69,6 +69,19 @@ export function getSheetNames(file: File): Promise<string[]> {
   });
 }
 
+function findHeaderRow(sheet: XLSX.WorkSheet): number {
+  const range = XLSX.utils.decode_range(sheet["!ref"] || "A1");
+  for (let r = range.s.r; r <= Math.min(range.e.r, 15); r++) {
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const cell = sheet[XLSX.utils.encode_cell({ r, c })];
+      if (cell && typeof cell.v === "string" && normalize(cell.v).includes("date")) {
+        return r;
+      }
+    }
+  }
+  return 0;
+}
+
 export function parseSheet(file: File, sheetName: string): Promise<ProductionRow[]> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -81,25 +94,59 @@ export function parseSheet(file: File, sheetName: string): Promise<ProductionRow
           resolve([]);
           return;
         }
-        const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { raw: false, defval: "" });
 
-        if (json.length === 0) {
-          resolve([]);
-          return;
+        // Find the actual header row (skip company name, address, title rows)
+        const headerRowIndex = findHeaderRow(sheet);
+        const range = XLSX.utils.decode_range(sheet["!ref"] || "A1");
+
+        // Read headers from the header row (may span 2 rows for merged headers)
+        const headers: string[] = [];
+        for (let c = range.s.c; c <= range.e.c; c++) {
+          const cell1 = sheet[XLSX.utils.encode_cell({ r: headerRowIndex, c })];
+          const cell2 = sheet[XLSX.utils.encode_cell({ r: headerRowIndex + 1, c })];
+          const h1 = cell1 ? String(cell1.v).trim() : "";
+          const h2 = cell2 ? String(cell2.v).trim() : "";
+          // Use sub-header if main header is empty or generic
+          headers.push(h2 || h1 || `col_${c}`);
         }
 
-        console.log("Detected headers:", Object.keys(json[0]));
+        console.log("Detected headers:", headers);
 
-        const rows: ProductionRow[] = json.map((row) => ({
-          date: parseExcelDate(findKey(row, ["date", "datum", "day", "tarikh"])),
-          checkedQty: toNum(findKey(row, ["checked qty", "quantity checked", "qty checked", "checked", "check qty"])),
-          rejects: toNum(findKey(row, ["rejects", "reject", "rejection", "rej"])),
-          needleHoles: toNum(findKey(row, ["needle holes", "needle hole", "nh"])),
-          uncutThreads: toNum(findKey(row, ["uncut threads", "uncut thread", "ut"])),
-          gapStitches: toNum(findKey(row, ["gap stitches", "gap stitch", "gs"])),
-        }));
+        // Read data rows starting after header rows
+        const dataStartRow = headerRowIndex + 2;
+        const rows: ProductionRow[] = [];
+
+        for (let r = dataStartRow; r <= range.e.r; r++) {
+          const rowObj: Record<string, unknown> = {};
+          let hasData = false;
+          for (let c = range.s.c; c <= range.e.c; c++) {
+            const cell = sheet[XLSX.utils.encode_cell({ r, c })];
+            if (cell && cell.v != null && cell.v !== "") {
+              rowObj[headers[c - range.s.c]] = cell.v;
+              hasData = true;
+            }
+          }
+          if (!hasData) continue;
+
+          // Skip total/summary rows
+          const dateVal = findKey(rowObj, ["date", "datum", "day", "tarikh"]);
+          if (dateVal == null || String(dateVal).toLowerCase().includes("total")) continue;
+
+          const checkedQty = toNum(findKey(rowObj, ["total check qty", "checked qty", "quantity checked", "qty checked", "checked", "check qty"]));
+          if (checkedQty === 0) continue; // Skip empty/invalid rows
+
+          rows.push({
+            date: parseExcelDate(dateVal),
+            checkedQty,
+            rejects: toNum(findKey(rowObj, ["emb reject qty", "rejects", "reject", "rejection", "rej", "reject qty"])),
+            needleHoles: toNum(findKey(rowObj, ["needle hole", "needle holes", "nh"])),
+            uncutThreads: toNum(findKey(rowObj, ["uncut thread", "uncut threads", "ut"])),
+            gapStitches: toNum(findKey(rowObj, ["gap stitch", "gap stitches", "gs"])),
+          });
+        }
 
         console.log("Parsed rows sample:", rows.slice(0, 3));
+        console.log("Total rows parsed:", rows.length);
         resolve(rows);
       } catch (err) {
         reject(err);
