@@ -3,20 +3,20 @@ import { BarChart3, LayoutDashboard, Upload, Table2, Settings, ChevronLeft, Chev
 interface Props {
   open: boolean;
   onToggle: () => void;
+  onNavigate?: (section: string) => void;
+  activeSection?: string;
 }
 
 const navItems = [
-  { icon: LayoutDashboard, label: "Dashboard", active: true },
-  { icon: Upload, label: "Upload Data" },
-  { icon: BarChart3, label: "Analytics" },
-  { icon: Table2, label: "Reports" },
-  { icon: Settings, label: "Settings" },
+  { icon: LayoutDashboard, label: "Dashboard", section: "dashboard" },
+  { icon: Upload, label: "Upload Data", section: "upload" },
+  { icon: BarChart3, label: "Analytics", section: "charts" },
+  { icon: Table2, label: "Data Table", section: "table" },
 ];
 
-export function DashboardSidebar({ open, onToggle }: Props) {
+export function DashboardSidebar({ open, onToggle, onNavigate, activeSection = "dashboard" }: Props) {
   return (
     <>
-      {/* Mobile overlay */}
       {open && (
         <div
           className="fixed inset-0 z-30 bg-black/40 lg:hidden"
@@ -44,8 +44,12 @@ export function DashboardSidebar({ open, onToggle }: Props) {
           {navItems.map((item) => (
             <button
               key={item.label}
+              onClick={() => {
+                onNavigate?.(item.section);
+                if (window.innerWidth < 1024) onToggle();
+              }}
               className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors ${
-                item.active
+                activeSection === item.section
                   ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
                   : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
               }`}

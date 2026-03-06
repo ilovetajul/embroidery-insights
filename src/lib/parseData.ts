@@ -55,23 +55,35 @@ export function getSheetNames(file: File): Promise<string[]> {
   });
 }
 
-function findHeaderRowFromMatrix(matrix: unknown[][]): number {
-  const dateHints = ["date", "datum", "day", "tarikh", "তারিখ"];
-  const maxScanRows = Math.min(matrix.length, 40);
+const DATE_HINTS = ["date", "datum", "day", "tarikh", "তারিখ"];
+const SUMMARY_HINTS = [
+  "total check", "check qty", "pass qty", "q.c pass", "qc pass",
+  "reject qty", "reject %", "defect %", "emb reject", "print reject",
+  "emb defect", "print defect", "total qty",
+];
+const CATEGORY_HINTS = ["reject details", "defect details", "reject  details"];
 
+function isSummaryColumn(name: string): boolean {
+  const n = normalize(name);
+  return SUMMARY_HINTS.some((h) => n.includes(h));
+}
+
+function isCategoryHeader(name: string): boolean {
+  const n = normalize(name);
+  return CATEGORY_HINTS.some((h) => n.includes(h));
+}
+
+function findHeaderRowFromMatrix(matrix: unknown[][]): number {
+  const maxScanRows = Math.min(matrix.length, 40);
   for (let r = 0; r < maxScanRows; r++) {
     const row = matrix[r] ?? [];
     const cells = row.map((v) => normalize(String(v ?? ""))).filter(Boolean);
     if (cells.length < 2) continue;
-
     const hasDate = cells.some((cell) =>
-      dateHints.some((hint) => cell.includes(hint) || hint.includes(cell))
+      DATE_HINTS.some((hint) => cell.includes(hint) || hint.includes(cell))
     );
-
-    // Header row: has "date" and at least 2 other non-empty columns
     if (hasDate && cells.length >= 3) return r;
   }
-
   return -1;
 }
 
@@ -103,32 +115,83 @@ export function parseSheet(file: File, sheetName: string): Promise<SheetData> {
         }
 
         const headerRow = matrix[headerRowIndex] ?? [];
-        const headers = headerRow.map((h, i) => {
+        const subHeaderRow = matrix[headerRowIndex + 1] ?? [];
+
+        // Build column info: merge main header + sub-header
+        const headers: string[] = headerRow.map((h, i) => {
           const val = String(h ?? "").trim();
           return val || `col_${i}`;
         });
 
-        console.log("Detected headers:", headers);
+        // Check if there's a sub-header row (has text in col_X positions)
+        const hasSubHeaders = headers.some(
+          (h, i) => h.startsWith("col_") && String(subHeaderRow[i] ?? "").trim() !== ""
+        );
 
-        // First column is date, rest are defect types
-        const defectColumns = headers.slice(1).filter((h) => !h.startsWith("col_"));
+        // Build final column mapping
+        type ColInfo = { index: number; name: string; isDefect: boolean };
+        const columns: ColInfo[] = [];
+        let currentCategory = "";
+        let dataStartRow = headerRowIndex + 1;
+
+        if (hasSubHeaders) {
+          dataStartRow = headerRowIndex + 2;
+        }
+
+        for (let i = 1; i < headers.length; i++) {
+          const mainHeader = headers[i];
+          const subHeader = hasSubHeaders ? String(subHeaderRow[i] ?? "").trim() : "";
+
+          if (isCategoryHeader(mainHeader)) {
+            // This is a category header like "Reject Details" or "Defect Details"
+            currentCategory = mainHeader;
+            // If it has its own value in data rows, skip it (it's a total)
+            continue;
+          }
+
+          if (mainHeader.startsWith("col_") && subHeader) {
+            // This is a sub-column under a category - these are actual defect types
+            columns.push({ index: i, name: subHeader, isDefect: true });
+          } else if (!mainHeader.startsWith("col_")) {
+            // Named column - check if it's a summary column
+            columns.push({
+              index: i,
+              name: mainHeader,
+              isDefect: !isSummaryColumn(mainHeader),
+            });
+          }
+        }
+
+        // If no sub-headers found and no category headers, treat all non-summary columns as defects
+        // (simple format: Date | Defect1 | Defect2 | ...)
+        const defectCols = columns.filter((c) => c.isDefect);
+        const defectColumns = defectCols.map((c) => c.name);
+
+        console.log("Final defect columns:", defectColumns);
+        console.log("Summary columns:", columns.filter((c) => !c.isDefect).map((c) => c.name));
 
         const rows: DefectRow[] = [];
-        for (let r = headerRowIndex + 1; r < matrix.length; r++) {
+        for (let r = dataStartRow; r < matrix.length; r++) {
           const row = matrix[r] ?? [];
           if (!row.some((v) => String(v ?? "").trim() !== "")) continue;
 
           const dateVal = row[0];
           const dateStr = String(dateVal ?? "").trim().toLowerCase();
 
-          if (!dateStr || dateStr.includes("total") || dateStr.includes("g-total") || dateStr.includes("grand")) continue;
+          if (
+            !dateStr ||
+            dateStr.includes("total") ||
+            dateStr.includes("g-total") ||
+            dateStr.includes("grand")
+          )
+            continue;
 
           const defects: Record<string, number> = {};
           let totalDefects = 0;
 
-          defectColumns.forEach((col, i) => {
-            const val = toNum(row[i + 1]);
-            defects[col] = val;
+          defectCols.forEach((col) => {
+            const val = toNum(row[col.index]);
+            defects[col.name] = val;
             totalDefects += val;
           });
 
