@@ -1,33 +1,26 @@
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
-import type { ProductionRow } from "@/lib/types";
+import type { SheetData } from "@/lib/types";
 
 interface Props {
-  data: ProductionRow[];
+  data: SheetData;
 }
 
-const COLORS = ["hsl(172 66% 40%)", "hsl(222 47% 18%)", "hsl(38 92% 50%)", "hsl(262 52% 47%)"];
+const COLORS = [
+  "hsl(172, 66%, 40%)", "hsl(222, 47%, 18%)", "hsl(38, 92%, 50%)",
+  "hsl(0, 72%, 51%)", "hsl(262, 52%, 47%)", "hsl(200, 70%, 50%)",
+  "hsl(340, 65%, 47%)", "hsl(120, 40%, 45%)",
+];
 
 export function DefectDonutChart({ data }: Props) {
-  const totals = data.reduce(
-    (acc, row) => {
-      acc.needleHoles += row.needleHoles;
-      acc.uncutThreads += row.uncutThreads;
-      acc.gapStitches += row.gapStitches;
-      return acc;
-    },
-    { needleHoles: 0, uncutThreads: 0, gapStitches: 0 }
-  );
-
-  const chartData = [
-    { name: "Needle Holes", value: totals.needleHoles },
-    { name: "Uncut Threads", value: totals.uncutThreads },
-    { name: "Gap Stitches", value: totals.gapStitches },
-  ];
+  const chartData = data.defectColumns.map((col) => ({
+    name: col,
+    value: data.rows.reduce((s, r) => s + (r.defects[col] || 0), 0),
+  }));
 
   return (
-    <div className="rounded-xl bg-card p-5 card-shadow animate-fade-in-up" style={{ animationDelay: "480ms" }}>
-      <h3 className="text-sm font-semibold text-foreground mb-4">Defect Breakdown</h3>
-      <div className="h-64">
+    <div className="rounded-xl bg-card p-5 card-shadow animate-fade-in-up border border-border/50">
+      <h3 className="text-sm font-semibold text-foreground mb-4">Defect Distribution</h3>
+      <div className="h-72">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie
@@ -35,7 +28,7 @@ export function DefectDonutChart({ data }: Props) {
               cx="50%"
               cy="50%"
               innerRadius={55}
-              outerRadius={85}
+              outerRadius={90}
               paddingAngle={3}
               dataKey="value"
             >
@@ -45,8 +38,8 @@ export function DefectDonutChart({ data }: Props) {
             </Pie>
             <Tooltip
               contentStyle={{
-                backgroundColor: "hsl(0 0% 100%)",
-                border: "1px solid hsl(220 13% 91%)",
+                backgroundColor: "hsl(var(--card))",
+                border: "1px solid hsl(var(--border))",
                 borderRadius: "8px",
                 fontSize: 12,
               }}
@@ -55,7 +48,7 @@ export function DefectDonutChart({ data }: Props) {
               verticalAlign="bottom"
               iconType="circle"
               iconSize={8}
-              wrapperStyle={{ fontSize: 12 }}
+              wrapperStyle={{ fontSize: 11 }}
             />
           </PieChart>
         </ResponsiveContainer>

@@ -1,129 +1,149 @@
 import { useState, useMemo, useCallback } from "react";
-import { DashboardSidebar } from "@/components/dashboard/DashboardSidebar";
 import { FileUploadZone } from "@/components/dashboard/FileUploadZone";
 import { GoogleSheetInput } from "@/components/dashboard/GoogleSheetInput";
 import { KPICards } from "@/components/dashboard/KPICards";
-import { ProductionBarChart } from "@/components/dashboard/ProductionBarChart";
-import { RejectionLineChart } from "@/components/dashboard/RejectionLineChart";
+import { DefectBarChart } from "@/components/dashboard/DefectBarChart";
 import { DefectDonutChart } from "@/components/dashboard/DefectDonutChart";
+import { DefectTrendChart } from "@/components/dashboard/DefectTrendChart";
+import { StackedBarChart } from "@/components/dashboard/StackedBarChart";
 import { DataTable } from "@/components/dashboard/DataTable";
+import { DashboardSidebar } from "@/components/dashboard/DashboardSidebar";
 import { getSheetNames, parseSheet } from "@/lib/parseData";
-import { sampleData } from "@/lib/sampleData";
-import type { ProductionRow, KPIData } from "@/lib/types";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { FileSpreadsheet } from "lucide-react";
+import { sampleSheets } from "@/lib/sampleData";
+import type { SheetData, KPIData } from "@/lib/types";
+import { Moon, Sun, Menu } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
-function computeKPIs(rows: ProductionRow[]): KPIData {
-  const totalProduction = rows.reduce((s, r) => s + r.checkedQty, 0);
-  const avgDailyVolume = rows.length > 0 ? totalProduction / rows.length : 0;
-  const totalRejects = rows.reduce((s, r) => s + r.rejects, 0);
-  const defectRate = totalProduction > 0 ? (totalRejects / totalProduction) * 100 : 0;
+function computeKPIs(sheet: SheetData): KPIData {
+  const totalDefects = sheet.rows.reduce((s, r) => s + r.totalDefects, 0);
+  const avgDailyDefect = sheet.rows.length > 0 ? totalDefects / sheet.rows.length : 0;
+  const totalDaysRecorded = sheet.rows.length;
 
-  const defects = {
-    "Needle Holes": rows.reduce((s, r) => s + r.needleHoles, 0),
-    "Uncut Threads": rows.reduce((s, r) => s + r.uncutThreads, 0),
-    "Gap Stitches": rows.reduce((s, r) => s + r.gapStitches, 0),
-  };
-  const topDefectCategory = Object.entries(defects).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "—";
+  const defectTotals: Record<string, number> = {};
+  sheet.rows.forEach((r) => {
+    Object.entries(r.defects).forEach(([key, val]) => {
+      defectTotals[key] = (defectTotals[key] || 0) + val;
+    });
+  });
 
-  return { totalProduction, avgDailyVolume, defectRate, topDefectCategory };
+  const mostFrequentDefect =
+    Object.entries(defectTotals).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "—";
+
+  return { totalDefects, mostFrequentDefect, avgDailyDefect, totalDaysRecorded };
 }
 
 const Index = () => {
-  const [data, setData] = useState<ProductionRow[]>(sampleData);
-  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
-  const [sheetNames, setSheetNames] = useState<string[]>([]);
-  const [selectedSheet, setSelectedSheet] = useState<string>("");
+  const [sheets, setSheets] = useState<SheetData[]>(sampleSheets);
+  const [activeTab, setActiveTab] = useState(0);
+  const [darkMode, setDarkMode] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
-  const kpis = useMemo(() => computeKPIs(data), [data]);
+  const activeSheet = sheets[activeTab] ?? sheets[0];
+  const kpis = useMemo(() => (activeSheet ? computeKPIs(activeSheet) : null), [activeSheet]);
 
   const handleFile = useCallback(async (file: File) => {
     try {
-      setUploadedFile(file);
       const names = await getSheetNames(file);
-      setSheetNames(names);
-      if (names.length === 1) {
-        // শুধু একটি শীট থাকলে সরাসরি লোড করো
-        setSelectedSheet(names[0]);
-        const rows = await parseSheet(file, names[0]);
-        if (rows.length > 0) setData(rows);
-      } else {
-        setSelectedSheet("");
-        setData([]);
+      const parsedSheets: SheetData[] = [];
+      for (const name of names) {
+        const sheetData = await parseSheet(file, name);
+        if (sheetData.rows.length > 0) {
+          parsedSheets.push(sheetData);
+        }
+      }
+      if (parsedSheets.length > 0) {
+        setSheets(parsedSheets);
+        setActiveTab(0);
       }
     } catch (err) {
       console.error("Failed to parse file:", err);
     }
   }, []);
 
-  const handleSheetSelect = useCallback(async (sheetName: string) => {
-    if (!uploadedFile) return;
-    setSelectedSheet(sheetName);
-    try {
-      const rows = await parseSheet(uploadedFile, sheetName);
-      if (rows.length > 0) setData(rows);
-    } catch (err) {
-      console.error("Failed to parse sheet:", err);
-    }
-  }, [uploadedFile]);
+  const toggleDark = () => {
+    setDarkMode((d) => {
+      const next = !d;
+      document.documentElement.classList.toggle("dark", next);
+      return next;
+    });
+  };
 
   return (
-    <div className="flex min-h-screen w-full">
-      <DashboardSidebar />
+    <div className="flex min-h-screen w-full bg-background">
+      <DashboardSidebar open={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} />
 
       <main className="flex-1 overflow-auto">
-        <header className="flex items-center justify-between px-6 py-4 border-b border-border bg-card">
-          <div>
-            <h1 className="text-lg font-bold text-foreground">Production Dashboard</h1>
-            <p className="text-xs text-muted-foreground">Embroidery quality control analytics</p>
+        {/* Header */}
+        <header className="sticky top-0 z-20 flex items-center justify-between px-4 md:px-6 py-3 border-b border-border bg-card/80 backdrop-blur-md">
+          <div className="flex items-center gap-3">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="lg:hidden"
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+            >
+              <Menu className="h-5 w-5" />
+            </Button>
+            <div>
+              <h1 className="text-base md:text-lg font-bold text-foreground">Defect Analytics Dashboard</h1>
+              <p className="text-xs text-muted-foreground">Production quality control insights</p>
+            </div>
           </div>
-          <div className="text-xs text-muted-foreground">
-            {data.length} records loaded
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-muted-foreground hidden sm:block">
+              {activeSheet?.rows.length ?? 0} records
+            </span>
+            <Button variant="ghost" size="icon" onClick={toggleDark}>
+              {darkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </Button>
           </div>
         </header>
 
-        <div className="p-6 space-y-6 max-w-7xl mx-auto">
-          <FileUploadZone onFileAccepted={handleFile} />
-          <GoogleSheetInput onFileReady={handleFile} />
+        <div className="p-4 md:p-6 space-y-5 max-w-[1400px] mx-auto">
+          {/* Upload */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <FileUploadZone onFileAccepted={handleFile} />
+            <GoogleSheetInput onFileReady={handleFile} />
+          </div>
 
-          {sheetNames.length > 1 && (
-            <div className="flex items-center gap-3 p-4 rounded-xl border border-border bg-card card-shadow">
-              <FileSpreadsheet className="h-5 w-5 text-accent shrink-0" />
-              <span className="text-sm font-medium text-foreground">শীট সিলেক্ট করুন:</span>
-              <Select value={selectedSheet} onValueChange={handleSheetSelect}>
-                <SelectTrigger className="w-[240px]">
-                  <SelectValue placeholder="একটি শীট বেছে নিন" />
-                </SelectTrigger>
-                <SelectContent>
-                  {sheetNames.map((name) => (
-                    <SelectItem key={name} value={name}>
-                      {name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          {/* Tabs */}
+          {sheets.length > 1 && (
+            <div className="flex gap-1 p-1 rounded-xl bg-muted/60">
+              {sheets.map((sheet, i) => (
+                <button
+                  key={sheet.sheetName}
+                  onClick={() => setActiveTab(i)}
+                  className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                    i === activeTab
+                      ? "bg-card text-foreground card-shadow"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {sheet.sheetName}
+                </button>
+              ))}
             </div>
           )}
 
-          <KPICards data={kpis} />
+          {/* KPIs */}
+          {kpis && <KPICards data={kpis} />}
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <ProductionBarChart data={data} />
-            <RejectionLineChart data={data} />
-          </div>
+          {/* Charts Row 1 */}
+          {activeSheet && (
+            <>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <DefectBarChart data={activeSheet} />
+                <DefectDonutChart data={activeSheet} />
+              </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <div className="lg:col-span-2">
-              <DataTable data={data} />
-            </div>
-            <DefectDonutChart data={data} />
-          </div>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <DefectTrendChart data={activeSheet} />
+                <StackedBarChart data={activeSheet} />
+              </div>
+
+              <DataTable data={activeSheet} />
+            </>
+          )}
         </div>
       </main>
     </div>
