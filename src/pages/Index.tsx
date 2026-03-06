@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useRef } from "react";
 import { FileUploadZone } from "@/components/dashboard/FileUploadZone";
 import { GoogleSheetInput } from "@/components/dashboard/GoogleSheetInput";
 import { KPICards } from "@/components/dashboard/KPICards";
@@ -37,6 +37,12 @@ const Index = () => {
   const [activeTab, setActiveTab] = useState(0);
   const [darkMode, setDarkMode] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [activeSection, setActiveSection] = useState("dashboard");
+
+  const uploadRef = useRef<HTMLDivElement>(null);
+  const chartsRef = useRef<HTMLDivElement>(null);
+  const tableRef = useRef<HTMLDivElement>(null);
+  const dashboardRef = useRef<HTMLDivElement>(null);
 
   const activeSheet = sheets[activeTab] ?? sheets[0];
   const kpis = useMemo(() => (activeSheet ? computeKPIs(activeSheet) : null), [activeSheet]);
@@ -60,6 +66,17 @@ const Index = () => {
     }
   }, []);
 
+  const handleNavigate = useCallback((section: string) => {
+    setActiveSection(section);
+    const refs: Record<string, React.RefObject<HTMLDivElement>> = {
+      dashboard: dashboardRef,
+      upload: uploadRef,
+      charts: chartsRef,
+      table: tableRef,
+    };
+    refs[section]?.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
+
   const toggleDark = () => {
     setDarkMode((d) => {
       const next = !d;
@@ -70,7 +87,12 @@ const Index = () => {
 
   return (
     <div className="flex min-h-screen w-full bg-background">
-      <DashboardSidebar open={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} />
+      <DashboardSidebar
+        open={sidebarOpen}
+        onToggle={() => setSidebarOpen(!sidebarOpen)}
+        onNavigate={handleNavigate}
+        activeSection={activeSection}
+      />
 
       <main className="flex-1 overflow-auto">
         {/* Header */}
@@ -101,37 +123,39 @@ const Index = () => {
 
         <div className="p-4 md:p-6 space-y-5 max-w-[1400px] mx-auto">
           {/* Upload */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div ref={uploadRef} className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <FileUploadZone onFileAccepted={handleFile} />
             <GoogleSheetInput onFileReady={handleFile} />
           </div>
 
           {/* Tabs */}
-          {sheets.length > 1 && (
-            <div className="flex gap-1 p-1 rounded-xl bg-muted/60">
-              {sheets.map((sheet, i) => (
-                <button
-                  key={sheet.sheetName}
-                  onClick={() => setActiveTab(i)}
-                  className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
-                    i === activeTab
-                      ? "bg-card text-foreground card-shadow"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {sheet.sheetName}
-                </button>
-              ))}
-            </div>
-          )}
+          <div ref={dashboardRef}>
+            {sheets.length > 1 && (
+              <div className="flex gap-1 p-1 rounded-xl bg-muted/60">
+                {sheets.map((sheet, i) => (
+                  <button
+                    key={sheet.sheetName}
+                    onClick={() => setActiveTab(i)}
+                    className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                      i === activeTab
+                        ? "bg-card text-foreground card-shadow"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {sheet.sheetName}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
           {/* KPIs */}
           {kpis && <KPICards data={kpis} />}
 
-          {/* Charts Row 1 */}
+          {/* Charts */}
           {activeSheet && (
             <>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div ref={chartsRef} className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <DefectBarChart data={activeSheet} />
                 <DefectDonutChart data={activeSheet} />
               </div>
@@ -141,7 +165,9 @@ const Index = () => {
                 <StackedBarChart data={activeSheet} />
               </div>
 
-              <DataTable data={activeSheet} />
+              <div ref={tableRef}>
+                <DataTable data={activeSheet} />
+              </div>
             </>
           )}
         </div>
