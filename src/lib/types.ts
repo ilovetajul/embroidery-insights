@@ -1,16 +1,18 @@
-export interface ProductionRow {
+export interface DefectRow {
   date: string;
-  checkedQty: number;
-  rejects: number;
-  needleHoles: number;
-  uncutThreads: number;
-  gapStitches: number;
-  [key: string]: string | number;
+  defects: Record<string, number>;
+  totalDefects: number;
+}
+
+export interface SheetData {
+  sheetName: string;
+  rows: DefectRow[];
+  defectColumns: string[];
 }
 
 export interface KPIData {
-  totalProduction: number;
-  avgDailyVolume: number;
-  defectRate: number;
-  topDefectCategory: string;
+  totalDefects: number;
+  mostFrequentDefect: string;
+  avgDailyDefect: number;
+  totalDaysRecorded: number;
 }
