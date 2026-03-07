@@ -1,4 +1,4 @@
-import { BarChart3, LayoutDashboard, Upload, Table2, Settings, ChevronLeft, ChevronRight } from "lucide-react";
+import { BarChart3, LayoutDashboard, Upload, Table2, ChevronLeft, ChevronRight } from "lucide-react";
 
 interface Props {
   open: boolean;
@@ -25,11 +25,12 @@ export function DashboardSidebar({ open, onToggle, onNavigate, activeSection = "
       )}
 
       <aside
-        className={`fixed lg:sticky top-0 left-0 z-40 flex flex-col h-screen bg-sidebar border-r border-sidebar-border transition-all duration-300 ${
-          open ? "w-60 translate-x-0" : "w-0 -translate-x-full lg:w-16 lg:translate-x-0"
+        className={`fixed lg:sticky top-0 left-0 z-40 flex flex-col h-screen bg-sidebar border-r border-sidebar-border transition-all duration-300 overflow-hidden ${
+          open ? "w-60" : "w-0 lg:w-16"
         }`}
       >
-        <div className="flex items-center gap-2.5 px-4 py-4 border-b border-sidebar-border min-h-[56px]">
+        {/* Logo area */}
+        <div className="flex items-center gap-2.5 px-4 py-4 border-b border-sidebar-border min-h-[56px] shrink-0">
           <div className="h-8 w-8 rounded-lg bg-sidebar-primary flex items-center justify-center shrink-0">
             <BarChart3 className="h-4 w-4 text-sidebar-primary-foreground" />
           </div>
@@ -40,6 +41,7 @@ export function DashboardSidebar({ open, onToggle, onNavigate, activeSection = "
           )}
         </div>
 
+        {/* Navigation */}
         <nav className="flex-1 px-2 py-3 space-y-1 overflow-hidden">
           {navItems.map((item) => (
             <button
@@ -60,7 +62,8 @@ export function DashboardSidebar({ open, onToggle, onNavigate, activeSection = "
           ))}
         </nav>
 
-        <div className="px-2 py-3 border-t border-sidebar-border">
+        {/* Footer with toggle */}
+        <div className="px-2 py-3 border-t border-sidebar-border shrink-0">
           <button
             onClick={onToggle}
             className="hidden lg:flex w-full items-center justify-center p-2 rounded-lg text-sidebar-foreground/50 hover:bg-sidebar-accent/50 transition-colors"
