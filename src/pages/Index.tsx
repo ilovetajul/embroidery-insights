@@ -19,6 +19,10 @@ function computeKPIs(sheet: SheetData): KPIData {
   const avgDailyDefect = sheet.rows.length > 0 ? totalDefects / sheet.rows.length : 0;
   const totalDaysRecorded = sheet.rows.length;
 
+  const totalQty = sheet.rows.reduce((s, r) => s + (r.totalQty ?? 0), 0);
+  const qcPassQty = sheet.rows.reduce((s, r) => s + (r.qcPassQty ?? 0), 0);
+  const totalRejectedQty = sheet.rows.reduce((s, r) => s + (r.totalRejectedQty ?? 0), 0);
+
   const defectTotals: Record<string, number> = {};
   sheet.rows.forEach((r) => {
     Object.entries(r.defects).forEach(([key, val]) => {
@@ -29,7 +33,7 @@ function computeKPIs(sheet: SheetData): KPIData {
   const mostFrequentDefect =
     Object.entries(defectTotals).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "—";
 
-  return { totalDefects, mostFrequentDefect, avgDailyDefect, totalDaysRecorded };
+  return { totalDefects, mostFrequentDefect, avgDailyDefect, totalDaysRecorded, totalQty, qcPassQty, totalRejectedQty };
 }
 
 const Index = () => {
