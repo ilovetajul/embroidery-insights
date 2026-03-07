@@ -28,8 +28,8 @@ export function DefectTrendChart({ data }: Props) {
               tick={{ fontSize: 11, fill: "hsl(220, 9%, 46%)" }}
               tickFormatter={(v) => {
                 const parts = v.split("-");
-                if (parts.length === 3 && parts[0].length === 4) return `${parts[2]}-${parts[1]}`;
-                if (parts.length === 3) return `${parts[0]}-${parts[1]}`;
+                if (parts.length === 3 && parts[0].length === 4) return String(parseInt(parts[2], 10));
+                if (parts.length === 3) return String(parseInt(parts[0], 10));
                 return v;
               }}
             />
