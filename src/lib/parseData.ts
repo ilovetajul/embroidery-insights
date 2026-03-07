@@ -59,8 +59,14 @@ const DATE_HINTS = ["date", "datum", "day", "tarikh", "তারিখ"];
 const SUMMARY_HINTS = [
   "total check", "check qty", "pass qty", "q.c pass", "qc pass",
   "reject qty", "reject %", "defect %", "emb reject", "print reject",
-  "emb defect", "print defect", "total qty",
+  "emb defect", "print defect", "total qty", "total rejected",
+  "total check qty", "qc pass qty", "total rejected qty",
 ];
+
+// Keys for extracting specific summary columns
+const TOTAL_QTY_HINTS = ["total check", "total check qty", "total qty", "check qty"];
+const QC_PASS_HINTS = ["pass qty", "q.c pass", "qc pass", "qc pass qty"];
+const REJECTED_QTY_HINTS = ["reject qty", "total rejected", "total rejected qty", "emb reject", "print reject"];
 const CATEGORY_HINTS = ["reject details", "defect details", "reject  details"];
 
 function isSummaryColumn(name: string): boolean {
@@ -129,7 +135,7 @@ export function parseSheet(file: File, sheetName: string): Promise<SheetData> {
         );
 
         // Build final column mapping
-        type ColInfo = { index: number; name: string; isDefect: boolean };
+        type ColInfo = { index: number; name: string; isDefect: boolean; summaryType?: string };
         const columns: ColInfo[] = [];
         let currentCategory = "";
         let dataStartRow = headerRowIndex + 1;
@@ -138,37 +144,47 @@ export function parseSheet(file: File, sheetName: string): Promise<SheetData> {
           dataStartRow = headerRowIndex + 2;
         }
 
+        function detectSummaryType(name: string): string | undefined {
+          const n = normalize(name);
+          if (TOTAL_QTY_HINTS.some((h) => n.includes(h))) return "totalQty";
+          if (QC_PASS_HINTS.some((h) => n.includes(h))) return "qcPassQty";
+          if (REJECTED_QTY_HINTS.some((h) => n.includes(h))) return "rejectedQty";
+          return undefined;
+        }
+
         for (let i = 1; i < headers.length; i++) {
           const mainHeader = headers[i];
           const subHeader = hasSubHeaders ? String(subHeaderRow[i] ?? "").trim() : "";
 
           if (isCategoryHeader(mainHeader)) {
-            // This is a category header like "Reject Details" or "Defect Details"
             currentCategory = mainHeader;
-            // If it has its own value in data rows, skip it (it's a total)
             continue;
           }
 
           if (mainHeader.startsWith("col_") && subHeader) {
-            // This is a sub-column under a category - these are actual defect types
             columns.push({ index: i, name: subHeader, isDefect: true });
           } else if (!mainHeader.startsWith("col_")) {
-            // Named column - check if it's a summary column
+            const isSummary = isSummaryColumn(mainHeader);
             columns.push({
               index: i,
               name: mainHeader,
-              isDefect: !isSummaryColumn(mainHeader),
+              isDefect: !isSummary,
+              summaryType: isSummary ? detectSummaryType(mainHeader) : undefined,
             });
           }
         }
 
-        // If no sub-headers found and no category headers, treat all non-summary columns as defects
-        // (simple format: Date | Defect1 | Defect2 | ...)
         const defectCols = columns.filter((c) => c.isDefect);
+        const summaryCols = columns.filter((c) => !c.isDefect);
         const defectColumns = defectCols.map((c) => c.name);
 
+        // Find specific summary column indices
+        const totalQtyCol = summaryCols.find((c) => c.summaryType === "totalQty");
+        const qcPassCol = summaryCols.find((c) => c.summaryType === "qcPassQty");
+        const rejectedCol = summaryCols.find((c) => c.summaryType === "rejectedQty");
+
         console.log("Final defect columns:", defectColumns);
-        console.log("Summary columns:", columns.filter((c) => !c.isDefect).map((c) => c.name));
+        console.log("Summary columns:", summaryCols.map((c) => `${c.name} (${c.summaryType})`));
 
         const rows: DefectRow[] = [];
         for (let r = dataStartRow; r < matrix.length; r++) {
@@ -201,6 +217,9 @@ export function parseSheet(file: File, sheetName: string): Promise<SheetData> {
             date: parseExcelDate(dateVal),
             defects,
             totalDefects,
+            totalQty: totalQtyCol ? toNum(row[totalQtyCol.index]) : undefined,
+            qcPassQty: qcPassCol ? toNum(row[qcPassCol.index]) : undefined,
+            totalRejectedQty: rejectedCol ? toNum(row[rejectedCol.index]) : undefined,
           });
         }
 

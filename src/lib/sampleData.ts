@@ -14,7 +14,10 @@ function genRows(defectNames: string[], days: number) {
       defects[name] = v;
       total += v;
     });
-    rows.push({ date, defects, totalDefects: total });
+    const totalQty = Math.floor(Math.random() * 500) + 300;
+    const totalRejectedQty = total;
+    const qcPassQty = totalQty - totalRejectedQty;
+    rows.push({ date, defects, totalDefects: total, totalQty, qcPassQty, totalRejectedQty });
   }
   return rows;
 }

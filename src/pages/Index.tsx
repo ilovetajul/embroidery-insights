@@ -19,6 +19,10 @@ function computeKPIs(sheet: SheetData): KPIData {
   const avgDailyDefect = sheet.rows.length > 0 ? totalDefects / sheet.rows.length : 0;
   const totalDaysRecorded = sheet.rows.length;
 
+  const totalQty = sheet.rows.reduce((s, r) => s + (r.totalQty ?? 0), 0);
+  const qcPassQty = sheet.rows.reduce((s, r) => s + (r.qcPassQty ?? 0), 0);
+  const totalRejectedQty = sheet.rows.reduce((s, r) => s + (r.totalRejectedQty ?? 0), 0);
+
   const defectTotals: Record<string, number> = {};
   sheet.rows.forEach((r) => {
     Object.entries(r.defects).forEach(([key, val]) => {
@@ -29,7 +33,7 @@ function computeKPIs(sheet: SheetData): KPIData {
   const mostFrequentDefect =
     Object.entries(defectTotals).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "—";
 
-  return { totalDefects, mostFrequentDefect, avgDailyDefect, totalDaysRecorded };
+  return { totalDefects, mostFrequentDefect, avgDailyDefect, totalDaysRecorded, totalQty, qcPassQty, totalRejectedQty };
 }
 
 const Index = () => {
@@ -128,15 +132,15 @@ const Index = () => {
             <GoogleSheetInput onFileReady={handleFile} />
           </div>
 
-          {/* Tabs */}
+          {/* Tabs - scrollable on mobile */}
           <div ref={dashboardRef}>
             {sheets.length > 1 && (
-              <div className="flex gap-1 p-1 rounded-xl bg-muted/60">
+              <div className="flex gap-1 p-1 rounded-xl bg-muted/60 overflow-x-auto">
                 {sheets.map((sheet, i) => (
                   <button
                     key={sheet.sheetName}
                     onClick={() => setActiveTab(i)}
-                    className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                    className={`shrink-0 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
                       i === activeTab
                         ? "bg-card text-foreground card-shadow"
                         : "text-muted-foreground hover:text-foreground"
