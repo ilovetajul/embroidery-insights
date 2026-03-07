@@ -59,8 +59,14 @@ const DATE_HINTS = ["date", "datum", "day", "tarikh", "তারিখ"];
 const SUMMARY_HINTS = [
   "total check", "check qty", "pass qty", "q.c pass", "qc pass",
   "reject qty", "reject %", "defect %", "emb reject", "print reject",
-  "emb defect", "print defect", "total qty",
+  "emb defect", "print defect", "total qty", "total rejected",
+  "total check qty", "qc pass qty", "total rejected qty",
 ];
+
+// Keys for extracting specific summary columns
+const TOTAL_QTY_HINTS = ["total check", "total check qty", "total qty", "check qty"];
+const QC_PASS_HINTS = ["pass qty", "q.c pass", "qc pass", "qc pass qty"];
+const REJECTED_QTY_HINTS = ["reject qty", "total rejected", "total rejected qty", "emb reject", "print reject"];
 const CATEGORY_HINTS = ["reject details", "defect details", "reject  details"];
 
 function isSummaryColumn(name: string): boolean {
