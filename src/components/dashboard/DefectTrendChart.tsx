@@ -27,10 +27,16 @@ export function DefectTrendChart({ data }: Props) {
               dataKey="date"
               tick={{ fontSize: 11, fill: "hsl(220, 9%, 46%)" }}
               tickFormatter={(v) => {
-                const parts = v.split("-");
-                if (parts.length === 3 && parts[0].length === 4) return String(parseInt(parts[2], 10));
-                if (parts.length === 3) return String(parseInt(parts[0], 10));
-                return v;
+                const str = String(v ?? "");
+                const parts = str.split(/[-\/\.]/);
+                if (parts.length === 3) {
+                  // YYYY-MM-DD → day is parts[2], DD-MM-YYYY or DD/MM/YYYY → day is parts[0]
+                  const day = parts[0].length === 4 ? parts[2] : parts[0];
+                  return String(parseInt(day, 10));
+                }
+                // Try to extract day from any date-like string
+                const match = str.match(/\b(\d{1,2})\b/);
+                return match ? String(parseInt(match[1], 10)) : str;
               }}
             />
             <YAxis tick={{ fontSize: 11, fill: "hsl(220, 9%, 46%)" }} />
