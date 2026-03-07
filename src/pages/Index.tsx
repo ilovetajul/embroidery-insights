@@ -132,15 +132,15 @@ const Index = () => {
             <GoogleSheetInput onFileReady={handleFile} />
           </div>
 
-          {/* Tabs */}
+          {/* Tabs - scrollable on mobile */}
           <div ref={dashboardRef}>
             {sheets.length > 1 && (
-              <div className="flex gap-1 p-1 rounded-xl bg-muted/60">
+              <div className="flex gap-1 p-1 rounded-xl bg-muted/60 overflow-x-auto">
                 {sheets.map((sheet, i) => (
                   <button
                     key={sheet.sheetName}
                     onClick={() => setActiveTab(i)}
-                    className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                    className={`shrink-0 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
                       i === activeTab
                         ? "bg-card text-foreground card-shadow"
                         : "text-muted-foreground hover:text-foreground"
