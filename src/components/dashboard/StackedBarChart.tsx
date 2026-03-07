@@ -27,7 +27,12 @@ export function StackedBarChart({ data }: Props) {
             <XAxis
               dataKey="date"
               tick={{ fontSize: 11, fill: "hsl(220, 9%, 46%)" }}
-              tickFormatter={(v) => v.slice(5)}
+              tickFormatter={(v) => {
+                const parts = v.split("-");
+                if (parts.length === 3 && parts[0].length === 4) return `${parts[2]}-${parts[1]}`;
+                if (parts.length === 3) return `${parts[0]}-${parts[1]}`;
+                return v;
+              }}
             />
             <YAxis tick={{ fontSize: 11, fill: "hsl(220, 9%, 46%)" }} />
             <Tooltip
